@@ -1,14 +1,19 @@
-import '../styles/globals.css'
+import './globals.css';
+import { ReactNode } from 'react';
+import Navbar from '@/components/Navbar';
 
 export const metadata = {
-  title: 'Seller Rescue Hub',
-  description: 'AI agent to rescue suspended Amazon seller accounts',
-}
+  title: 'SellerRescueHub',
+  description: 'AI-powered diagnostics for Amazon sellers',
+};
 
-export default function RootLayout({ children }) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <Navbar />
+        <main className="p-6">{children}</main>
+      </body>
     </html>
-  )
+  );
 }

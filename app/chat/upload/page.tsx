@@ -1,50 +1,55 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
+import { useState } from 'react';
 
 export default function UploadPage() {
-  const [file, setFile] = useState<File | null>(null)
-  const [message, setMessage] = useState('')
+  const [file, setFile] = useState<File | null>(null);
+  const [response, setResponse] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleUpload = async () => {
-    if (!file) return
+    if (!file) return;
 
-    const formData = new FormData()
-    formData.append('file', file)
+    setLoading(true);
+    setResponse('');
+
+    const formData = new FormData();
+    formData.append('file', file);
 
     const res = await fetch('/api/upload', {
       method: 'POST',
       body: formData,
-    })
+    });
+
+    const data = await res.json();
 
     if (res.ok) {
-      const data = await res.json()
-      setMessage(`Upload success! File ID: ${data.id}`)
+      setResponse(data.result);
     } else {
-      const error = await res.text()
-      setMessage(`Error: ${error}`)
+      setResponse(`Error: ${data.error}`);
     }
-  }
+
+    setLoading(false);
+  };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-4">
-      <h1 className="text-2xl font-bold mb-4">Upload Your Amazon Account File</h1>
-
-      <input
-        type="file"
-        accept=".txt,.pdf,.csv,.json"
-        onChange={(e) => setFile(e.target.files?.[0] || null)}
-        className="mb-4"
-      />
-
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-4">Upload Amazon File for Analysis</h1>
+      <input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} />
       <button
         onClick={handleUpload}
-        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+        className="bg-blue-600 text-white px-4 py-2 mt-4 rounded disabled:opacity-50"
+        disabled={!file || loading}
       >
-        Upload
+        {loading ? 'Analyzing...' : 'Upload and Analyze'}
       </button>
 
-      {message && <p className="mt-4">{message}</p>}
+      {response && (
+        <div className="mt-6 p-4 bg-gray-100 border rounded">
+          <h2 className="font-semibold mb-2">AI Response:</h2>
+          <pre className="whitespace-pre-wrap">{response}</pre>
+        </div>
+      )}
     </div>
-  )
+  );
 }

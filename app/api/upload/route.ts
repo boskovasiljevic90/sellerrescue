@@ -1,27 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { writeFile } from 'fs/promises';
-import path from 'path';
-import { nanoid } from 'nanoid';
+import { OpenAI } from 'openai';
+import { Readable } from 'stream';
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
   const file = formData.get('file') as File;
 
   if (!file) {
-    return NextResponse.json({ error: 'No file uploaded.' }, { status: 400 });
+    return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
   }
 
-  const bytes = await file.arrayBuffer();
-  const buffer = Buffer.from(bytes);
-  const fileName = `${nanoid()}-${file.name}`;
-  const filePath = path.join('/tmp', fileName); // Vercel koristi /tmp za privremeno skladištenje
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const content = buffer.toString('utf-8');
 
-  await writeFile(filePath, buffer);
+  try {
+    const chatResponse = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are an expert in Amazon seller account health diagnostics. Analyze the uploaded file and explain any issues or opportunities in the data.',
+        },
+        {
+          role: 'user',
+          content: `Analyze this file content:\n\n${content}`,
+        },
+      ],
+    });
 
-  return NextResponse.json({
-    message: 'File uploaded successfully',
-    name: file.name,
-    size: file.size,
-    path: filePath
-  });
+    const result = chatResponse.choices[0].message.content;
+    return NextResponse.json({ result });
+  } catch (error) {
+    console.error('Upload analysis error:', error);
+    return NextResponse.json({ error: 'AI analysis failed' }, { status: 500 });
+  }
 }
