@@ -1,6 +1,6 @@
-import './globals.css';
+import '../styles/globals.css';
 import { ReactNode } from 'react';
-import Navbar from '@/components/Navbar';
+import Navbar from '../components/Navbar';
 
 export const metadata = {
   title: 'SellerRescueHub',
