@@ -1,53 +1,50 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
+import { useState } from 'react'
 
 export default function UploadPage() {
-  const [file, setFile] = useState<File | null>(null);
-  const [response, setResponse] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [file, setFile] = useState<File | null>(null)
+  const [message, setMessage] = useState('')
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.length) {
-      setFile(e.target.files[0]);
-      setResponse(null);
-    }
-  };
+  const handleUpload = async () => {
+    if (!file) return
 
-  const handleSubmit = async () => {
-    if (!file) return;
+    const formData = new FormData()
+    formData.append('file', file)
 
-    setLoading(true);
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const res = await fetch('/api/scan', {
+    const res = await fetch('/api/upload', {
       method: 'POST',
       body: formData,
-    });
+    })
 
-    const data = await res.json();
-    setResponse(data.analysis);
-    setLoading(false);
-  };
+    if (res.ok) {
+      const data = await res.json()
+      setMessage(`Upload success! File ID: ${data.id}`)
+    } else {
+      const error = await res.text()
+      setMessage(`Error: ${error}`)
+    }
+  }
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Upload Seller File</h1>
-      <input type="file" onChange={handleFileChange} />
+    <div className="flex flex-col items-center justify-center min-h-screen p-4">
+      <h1 className="text-2xl font-bold mb-4">Upload Your Amazon Account File</h1>
+
+      <input
+        type="file"
+        accept=".txt,.pdf,.csv,.json"
+        onChange={(e) => setFile(e.target.files?.[0] || null)}
+        className="mb-4"
+      />
+
       <button
-        onClick={handleSubmit}
-        disabled={!file || loading}
-        style={{ marginLeft: 10 }}
+        onClick={handleUpload}
+        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
       >
-        {loading ? 'Analyzing...' : 'Scan File'}
+        Upload
       </button>
-      {response && (
-        <div style={{ marginTop: 20 }}>
-          <h3>AI Analysis:</h3>
-          <pre>{response}</pre>
-        </div>
-      )}
+
+      {message && <p className="mt-4">{message}</p>}
     </div>
-  );
+  )
 }
