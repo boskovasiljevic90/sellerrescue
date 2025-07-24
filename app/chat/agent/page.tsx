@@ -15,18 +15,22 @@ export default function ChatAgentPage() {
     setInput("");
 
     try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: input }),
-      });
+      const response = await fetch('/api/chat', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({ messages }),
+});
 
-      const data = await res.json();
-      setMessages((prev) => [...prev, `AI: ${data.reply}`]);
-    } catch (error) {
-      setMessages((prev) => [...prev, "AI: Error occurred"]);
-    }
-  };
+const data = await response.json();
+setMessages((prevMessages) => [
+  ...prevMessages,
+  {
+    role: 'assistant',
+    content: data.message || 'Error occurred',
+  },
+]);
 
   return (
     <div style={{ maxWidth: 800, margin: "0 auto", padding: 20 }}>
