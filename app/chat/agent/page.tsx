@@ -1,60 +1,57 @@
-// app/chat/agent/page.tsx
+'use client';
 
-"use client";
+import { useState } from 'react';
 
-import { useState } from "react";
+export default function ChatPage() {
+  const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
+  const [input, setInput] = useState('');
 
-export default function ChatAgentPage() {
-  const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<string[]>([]);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  const sendMessage = async () => {
-    if (!input.trim()) return;
+    const newMessage = { role: 'user', content: input };
+    const newMessages = [...messages, newMessage];
+    setMessages(newMessages);
+    setInput('');
 
-    setMessages((prev) => [...prev, `You: ${input}`]);
-    setInput("");
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ messages: newMessages }),
+    });
 
-    try {
-      const response = await fetch('/api/chat', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({ messages }),
-});
+    const data = await response.json();
 
-const data = await response.json();
-setMessages((prevMessages) => [
-  ...prevMessages,
-  {
-    role: 'assistant',
-    content: data.message || 'Error occurred',
-  },
-]);
+    setMessages((prevMessages) => [
+      ...prevMessages,
+      { role: 'assistant', content: data.message || 'Error occurred' },
+    ]);
+  };
 
   return (
-    <div style={{ maxWidth: 800, margin: "0 auto", padding: 20 }}>
-      <h1 style={{ fontSize: 24, fontWeight: "bold", marginBottom: 16 }}>AI Assistant</h1>
-
-      <div style={{ backgroundColor: "#f5f5f5", padding: 16, minHeight: 300, marginBottom: 16 }}>
-        {messages.map((msg, idx) => (
-          <p key={idx}>{msg}</p>
+    <div className="p-6 max-w-2xl mx-auto">
+      <h1 className="text-2xl font-bold mb-4">AI Assistant</h1>
+      <div className="bg-gray-100 p-4 rounded mb-4 h-64 overflow-y-auto">
+        {messages.map((msg, index) => (
+          <div key={index} className="mb-2">
+            <strong>{msg.role === 'user' ? 'You' : 'AI'}:</strong> {msg.content}
+          </div>
         ))}
       </div>
-
-      <div style={{ display: "flex", gap: 8 }}>
+      <form onSubmit={handleSubmit} className="flex">
         <input
           type="text"
-          placeholder="Type your message..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          style={{ flex: 1, padding: 8 }}
+          className="flex-grow p-2 border rounded-l"
+          placeholder="Type your message..."
         />
-        <button onClick={sendMessage} style={{ padding: "8px 16px" }}>
+        <button type="submit" className="bg-blue-500 text-white px-4 rounded-r">
           Send
         </button>
-      </div>
+      </form>
     </div>
   );
 }
