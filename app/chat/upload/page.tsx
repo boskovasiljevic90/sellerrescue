@@ -24,14 +24,22 @@ export default function UploadPage() {
         body: formData,
       });
 
-      const data = await res.json();
+      const text = await res.text(); // prvo uzmi raw text
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        // pokaži šta je došlo ako nije validan JSON
+        throw new Error(`Failed to parse JSON response. Raw response: ${text}`);
+      }
+
       if (!res.ok) {
         setError(data.error || 'Upload failed.');
       } else {
         setAnalysis(data.message || JSON.stringify(data));
       }
     } catch (err: any) {
-      setError(String(err.message || err));
+      setError(err.message || String(err));
     } finally {
       setLoading(false);
     }
