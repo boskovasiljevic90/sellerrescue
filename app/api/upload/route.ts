@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pdfParse from 'pdf-parse';
-import { Readable } from 'stream';
 import OpenAI from 'openai';
 
 const openai = new OpenAI({
