@@ -1,41 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { OpenAI } from 'openai';
+import pdfParse from 'pdf-parse';
 import { Readable } from 'stream';
+import OpenAI from 'openai';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
 export async function POST(req: NextRequest) {
-  const formData = await req.formData();
-  const file = formData.get('file') as File;
-
-  if (!file) {
-    return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
-  }
-
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const content = buffer.toString('utf-8');
-
   try {
-    const chatResponse = await openai.chat.completions.create({
-      model: 'gpt-4o',
+    const formData = await req.formData();
+    const file = formData.get('file') as File;
+
+    if (!file) {
+      return NextResponse.json({ error: 'No file uploaded.' }, { status: 400 });
+    }
+
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    const parsed = await pdfParse(buffer);
+    const text = parsed.text;
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4',
       messages: [
         {
           role: 'system',
-          content: 'You are an expert in Amazon seller account health diagnostics. Analyze the uploaded file and explain any issues or opportunities in the data.',
+          content: 'You are an expert Amazon Seller Account AI Analyst. Analyze the following extracted content from a user-uploaded PDF file and provide helpful insights and suggestions for improvements.',
         },
         {
           role: 'user',
-          content: `Analyze this file content:\n\n${content}`,
+          content: text,
         },
       ],
     });
 
-    const result = chatResponse.choices[0].message.content;
-    return NextResponse.json({ result });
+    const aiResponse = completion.choices[0].message.content;
+    return NextResponse.json({ result: aiResponse });
+
   } catch (error) {
-    console.error('Upload analysis error:', error);
-    return NextResponse.json({ error: 'AI analysis failed' }, { status: 500 });
+    console.error('Upload error:', error);
+    return NextResponse.json({ error: 'Something went wrong.' }, { status: 500 });
   }
 }
