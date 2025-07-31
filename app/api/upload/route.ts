@@ -4,15 +4,14 @@ import pdfParse from 'pdf-parse';
 import OpenAI from 'openai';
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || '', // pobrini se da je u Vercel env var postavljeno
+  apiKey: process.env.OPENAI_API_KEY || '',
 });
 
-function chunkText(text: string, maxChars = 8000): string[] {
+function chunkText(text: string, maxChars = 6000): string[] {
   const chunks: string[] = [];
   let start = 0;
   while (start < text.length) {
     let end = Math.min(start + maxChars, text.length);
-    // pokušaj da presečeš na novi red ako može (ne mora strogo)
     if (end < text.length) {
       const lastNewline = text.lastIndexOf('\n', end);
       if (lastNewline > start) end = lastNewline;
@@ -32,7 +31,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No file uploaded.' }, { status: 400 });
     }
 
-    // podržava PDF i CSV (samo čita tekstualno za CSV)
     const filename = file.name.toLowerCase();
     let extractedText = '';
 
@@ -51,15 +49,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'File had no extractable text.' }, { status: 400 });
     }
 
-    // chunkuj ako je preveliko da ne prelazi rate limit / token limit
-    const chunks = chunkText(extractedText, 6000); // grubo da ostane ispod token limita
-
+    const chunks = chunkText(extractedText, 6000);
     let combinedAnalysis = '';
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
       const prompt = `
-You are an expert Amazon Seller Account analyst. Analyze the following part (${i + 1}/${chunks.length}) of the user-uploaded report. 
+You are an expert Amazon Seller Account analyst. Analyze the following part (${i + 1}/${chunks.length}) of the user-uploaded report.
 Provide concise actionable insights, note anomalies, and if context is missing request clarifying follow-up questions.
 
 Content:
