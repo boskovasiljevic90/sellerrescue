@@ -76,4 +76,15 @@ export default function UploadPage() {
         {loading ? 'Analyzing...' : 'Upload & Analyze'}
       </button>
 
-      {
+      {error && (
+        <div className="mt-4 text-red-500 font-semibold">{error}</div>
+      )}
+
+      {response && (
+        <div className="mt-6 bg-gray-100 p-4 rounded whitespace-pre-wrap text-sm font-mono">
+          {response}
+        </div>
+      )}
+    </div>
+  );
+}
