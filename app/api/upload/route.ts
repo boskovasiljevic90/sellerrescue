@@ -23,7 +23,6 @@ export async function POST(req: NextRequest) {
       const file = formData.get('file') as File;
 
       if (!file) {
-        console.warn('[upload] no file provided');
         return NextResponse.json({ error: 'No file uploaded.' }, { status: 400 });
       }
 
@@ -34,16 +33,18 @@ export async function POST(req: NextRequest) {
         const buffer = Buffer.from(arrayBuffer);
         const parsed = await pdfParse(buffer);
         textContent = parsed.text || '';
-      } else if (filename.endsWith('.csv') || filename.endsWith('.tsv') || filename.endsWith('.txt')) {
+      } else if (
+        filename.endsWith('.csv') ||
+        filename.endsWith('.tsv') ||
+        filename.endsWith('.txt')
+      ) {
         const arrayBuffer = await file.arrayBuffer();
         textContent = Buffer.from(arrayBuffer).toString('utf-8');
       } else {
-        // fallback: try to read as text
         const arrayBuffer = await file.arrayBuffer();
         textContent = Buffer.from(arrayBuffer).toString('utf-8');
       }
     } else {
-      console.warn('[upload] unsupported content type', contentType);
       return NextResponse.json(
         { error: 'Unsupported content type. Use multipart/form-data with a file.' },
         { status: 400 }
@@ -51,7 +52,6 @@ export async function POST(req: NextRequest) {
     }
 
     if (!textContent.trim()) {
-      console.warn('[upload] empty extracted text');
       return NextResponse.json(
         { error: 'Uploaded file contained no extractable text.' },
         { status: 400 }
@@ -82,7 +82,6 @@ Keep the answer concise and business-focused.
     });
 
     const aiResponse = completion.choices?.[0]?.message?.content || 'No response from AI.';
-    console.log('[upload] success response length:', aiResponse.length);
     return NextResponse.json({ message: aiResponse });
   } catch (err: any) {
     console.error('[upload] error caught:', err);
