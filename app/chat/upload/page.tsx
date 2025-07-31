@@ -1,45 +1,48 @@
+// app/chat/upload/page.tsx
 'use client';
 
 import { useState } from 'react';
 
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
-  const [analysis, setAnalysis] = useState<string>('');
+  const [result, setResult] = useState<string>('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string>('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) return;
     setLoading(true);
-    setError(null);
-    setAnalysis('');
-
+    setError('');
+    setResult('');
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      const form = new FormData();
+      form.append('file', file);
 
       const res = await fetch('/api/upload', {
         method: 'POST',
-        body: formData,
+        body: form,
       });
 
-      const text = await res.text(); // prvo uzmi raw text
-      let data: any;
+      const dataText = await res.text();
+      let data;
       try {
-        data = JSON.parse(text);
-      } catch (parseErr) {
-        // pokaži šta je došlo ako nije validan JSON
-        throw new Error(`Failed to parse JSON response. Raw response: ${text}`);
+        data = JSON.parse(dataText);
+      } catch {
+        setError('Failed to parse response JSON.');
+        setLoading(false);
+        return;
       }
 
-      if (!res.ok) {
-        setError(data.error || 'Upload failed.');
+      if (data.error) {
+        setError(data.error);
+      } else if (data.message) {
+        setResult(data.message);
       } else {
-        setAnalysis(data.message || JSON.stringify(data));
+        setResult(JSON.stringify(data));
       }
     } catch (err: any) {
-      setError(err.message || String(err));
+      setError(err.message || 'Network error');
     } finally {
       setLoading(false);
     }
@@ -53,12 +56,9 @@ export default function UploadPage() {
           <span>Select file</span>
           <input
             type="file"
-            accept=".pdf,.csv,.tsv,.txt"
             className="hidden"
             onChange={(e) => {
-              if (e.target.files && e.target.files[0]) {
-                setFile(e.target.files[0]);
-              }
+              if (e.target.files) setFile(e.target.files[0]);
             }}
           />
         </label>
@@ -66,19 +66,23 @@ export default function UploadPage() {
         <button
           type="submit"
           disabled={!file || loading}
-          className="ml-auto bg-blue-600 text-white px-6 py-3 rounded"
+          className="bg-blue-600 text-white px-6 py-3 rounded"
         >
           {loading ? 'Analyzing...' : 'Analyze'}
         </button>
       </form>
 
-      <div className="bg-gray-100 p-4 rounded min-h-[200px]">
-        {error && <div className="text-red-600 mb-2">{error}</div>}
-        {analysis && (
-          <pre className="whitespace-pre-wrap text-sm">{analysis}</pre>
-        )}
-        {!analysis && !error && !loading && <div>Upload a report and get insights.</div>}
-      </div>
+      {error && (
+        <div className="bg-red-100 text-red-800 p-4 rounded mb-4">
+          <strong>Error:</strong> {error}
+        </div>
+      )}
+
+      {result && (
+        <div className="bg-gray-100 p-4 rounded whitespace-pre-wrap font-mono">
+          {JSON.stringify({ message: result }, null, 2)}
+        </div>
+      )}
     </div>
   );
 }
