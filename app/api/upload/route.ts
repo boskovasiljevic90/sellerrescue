@@ -1,85 +1,99 @@
-// app/api/upload/route.ts
-import { NextRequest, NextResponse } from 'next/server';
-import pdfParse from 'pdf-parse';
-import OpenAI from 'openai';
+import { NextRequest, NextResponse } from "next/server";
+import pdfParse from "pdf-parse";
+import OpenAI from "openai";
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || '',
+  apiKey: process.env.OPENAI_API_KEY || "",
 });
 
-function chunkText(text: string, maxChars = 6000): string[] {
-  const chunks: string[] = [];
-  let start = 0;
-  while (start < text.length) {
-    let end = Math.min(start + maxChars, text.length);
-    if (end < text.length) {
-      const lastNewline = text.lastIndexOf('\n', end);
-      if (lastNewline > start) end = lastNewline;
-    }
-    chunks.push(text.slice(start, end));
-    start = end;
+async function extractTextFromFile(file: File): Promise<string> {
+  const name = file.name.toLowerCase();
+  const arrayBuffer = await file.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+
+  if (name.endsWith(".pdf")) {
+    const parsed = await pdfParse(buffer);
+    return parsed.text || "";
   }
-  return chunks;
+
+  // CSV or plain text fallback: decode as utf-8 string
+  return buffer.toString("utf-8");
 }
 
 export async function POST(req: NextRequest) {
   try {
+    const contentType = req.headers.get("content-type") || "";
+    if (!contentType.includes("multipart/form-data")) {
+      return NextResponse.json(
+        { error: "Invalid content-type, expected multipart/form-data." },
+        { status: 400 }
+      );
+    }
+
     const formData = await req.formData();
-    const file = formData.get('file') as File;
+    const file = formData.get("file") as File | null;
 
     if (!file) {
-      return NextResponse.json({ error: 'No file uploaded.' }, { status: 400 });
+      return NextResponse.json({ error: "No file uploaded." }, { status: 400 });
     }
 
-    const filename = file.name.toLowerCase();
-    let extractedText = '';
+    const extractedText = await extractTextFromFile(file);
 
-    if (filename.endsWith('.pdf')) {
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-      const parsed = await pdfParse(buffer);
-      extractedText = parsed.text || '';
-    } else if (filename.endsWith('.csv') || filename.endsWith('.txt')) {
-      extractedText = await file.text();
-    } else {
-      return NextResponse.json({ error: 'Unsupported file type. Only PDF, CSV, TXT allowed.' }, { status: 400 });
+    if (!extractedText || extractedText.trim().length === 0) {
+      return NextResponse.json(
+        { error: "Failed to extract any usable text from the uploaded file." },
+        { status: 422 }
+      );
     }
 
-    if (!extractedText.trim()) {
-      return NextResponse.json({ error: 'File had no extractable text.' }, { status: 400 });
-    }
-
-    const chunks = chunkText(extractedText, 6000);
-    let combinedAnalysis = '';
-
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i];
-      const prompt = `
-You are an expert Amazon Seller Account analyst. Analyze the following part (${i + 1}/${chunks.length}) of the user-uploaded report.
-Provide concise actionable insights, note anomalies, and if context is missing request clarifying follow-up questions.
-
-Content:
-${chunk}
+    const systemPrompt = `
+You are an expert Amazon Seller Account AI Analyst. 
+Analyze the provided report content and give actionable insights, problems, and prioritized recommendations.
+If the content is raw or partially structured, explain what could be improved for better data quality.
+Keep answer concise but specific.
 `;
 
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4',
-        messages: [
-          { role: 'system', content: 'You help Amazon sellers understand their reports and identify problems/opportunities.' },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.3,
-        max_tokens: 1000,
-      });
+    const userMessage = extractedText;
 
-      const part = completion.choices?.[0]?.message?.content || '';
-      combinedAnalysis += `--- Part ${i + 1} Analysis ---\n${part}\n\n`;
+    let completion: any;
+    const messages = [
+      { role: "system", content: systemPrompt.trim() },
+      { role: "user", content: userMessage },
+    ];
+
+    // Try GPT-4 first, fallback to 3.5 if rate/size limit error
+    try {
+      completion = await openai.chat.completions.create({
+        model: "gpt-4",
+        messages,
+        temperature: 0.3,
+        max_tokens: 1200,
+      });
+    } catch (err: any) {
+      console.warn("GPT-4 failed, falling back to gpt-3.5-turbo:", err.message);
+      completion = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages,
+        temperature: 0.3,
+        max_tokens: 1200,
+      });
     }
 
-    return NextResponse.json({ result: combinedAnalysis.trim() });
-  } catch (err: any) {
-    console.error('Upload error:', err);
-    const msg = err?.message || String(err);
-    return NextResponse.json({ error: 'Something went wrong: ' + msg }, { status: 500 });
+    const answer = completion?.choices?.[0]?.message?.content || "";
+
+    if (!answer) {
+      return NextResponse.json(
+        { error: "OpenAI returned empty response." },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ result: answer });
+  } catch (error: any) {
+    console.error("Upload error:", error);
+    return NextResponse.json(
+      { error: error.message || "Something went wrong." },
+      { status: 500 }
+    );
   }
 }
