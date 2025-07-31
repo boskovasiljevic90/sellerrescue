@@ -1,88 +1,44 @@
 'use client';
 
-import { useState } from 'react';
-import { nanoid } from 'nanoid';
+import React, { useState } from 'react';
 
 export default function UploadPage() {
-  const [file, setFile] = useState<File | null>(null);
-  const [response, setResponse] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFile(e.target.files?.[0] || null);
-    setResponse(null);
-    setError(null);
-  };
-
-  const handleUpload = async () => {
-    if (!file) return;
+  const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
     setLoading(true);
-    setResponse(null);
-    setError(null);
+    setResult(null);
 
-    try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const content = reader.result?.toString();
-        if (!content) {
-          setError('Could not read file.');
-          setLoading(false);
-          return;
-        }
+    const formData = new FormData(e.currentTarget);
 
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            id: nanoid(),
-            messages: [
-              {
-                role: 'user',
-                content: `Analyze this file content and provide actionable insights:\n\n${content}`,
-              },
-            ],
-          }),
-        });
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
 
-        const data = await res.text();
-        setResponse(data);
-        setLoading(false);
-      };
+    const data = await res.json();
+    if (data.result) setResult(data.result);
+    else setResult(data.error || 'Unexpected error occurred.');
 
-      reader.readAsText(file);
-    } catch (err) {
-      setError('Upload failed. Try again.');
-      setLoading(false);
-    }
+    setLoading(false);
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-4">Upload File for Analysis</h1>
-      <input
-        type="file"
-        accept="*"
-        onChange={handleFileChange}
-        className="mb-4"
-      />
-      <button
-        onClick={handleUpload}
-        className="px-4 py-2 bg-black text-white rounded"
-        disabled={loading || !file}
-      >
-        {loading ? 'Analyzing...' : 'Upload & Analyze'}
-      </button>
+    <div className="p-6 max-w-2xl mx-auto">
+      <h1 className="text-2xl font-bold mb-4">Upload your Amazon store report</h1>
+      <form onSubmit={handleUpload} className="space-y-4">
+        <input type="file" name="file" accept=".pdf,.csv,.xlsx" required />
+        <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded">
+          {loading ? 'Analyzing...' : 'Upload & Analyze'}
+        </button>
+      </form>
 
-      {error && (
-        <div className="mt-4 text-red-500 font-semibold">{error}</div>
-      )}
-
-      {response && (
-        <div className="mt-6 bg-gray-100 p-4 rounded whitespace-pre-wrap text-sm font-mono">
-          {response}
+      {result && (
+        <div className="mt-6 p-4 bg-gray-100 rounded">
+          <h2 className="font-semibold">AI Insight:</h2>
+          <pre className="whitespace-pre-wrap">{result}</pre>
         </div>
       )}
     </div>

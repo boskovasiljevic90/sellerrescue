@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pdfParse from 'pdf-parse';
 import OpenAI from 'openai';
+import { Readable } from 'stream';
+import { parse } from 'csv-parse/sync';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,53 +15,44 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No file uploaded.' }, { status: 400 });
     }
 
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const buffer = Buffer.from(await file.arrayBuffer());
+    let content = '';
 
-    const parsed = await pdfParse(buffer);
-    const fullText = parsed.text;
+    if (file.name.endsWith('.pdf')) {
+      const parsed = await pdfParse(buffer);
+      content = parsed.text;
+    } else if (file.name.endsWith('.csv')) {
+      const records = parse(buffer.toString(), {
+        columns: true,
+        skip_empty_lines: true,
+      });
+      content = JSON.stringify(records, null, 2);
+    } else {
+      return NextResponse.json({ error: 'Unsupported file type.' }, { status: 400 });
+    }
 
-    // Step 1: Summarize the PDF to avoid token limits
-    const summarization = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You are a helpful assistant. Summarize the key contents of the following Amazon seller PDF report within 1000 tokens.',
-        },
-        {
-          role: 'user',
-          content: fullText.slice(0, 15000), // prevent 3.5-turbo overload
-        },
-      ],
-    });
+    // Truncate if over token limit
+    const tokenLimit = 8000;
+    if (content.length > tokenLimit * 4) {
+      content = content.slice(0, tokenLimit * 4);
+    }
 
-    const summary = summarization.choices[0].message.content || '';
-
-    // Step 2: Analyze the summarized content using GPT-4
-    const analysis = await openai.chat.completions.create({
+    const completion = await openai.chat.completions.create({
       model: 'gpt-4',
       messages: [
         {
           role: 'system',
           content:
-            'You are an expert Amazon Seller Account AI Analyst. Based on the following summarized content, provide actionable insights, warnings, and suggestions for account improvement.',
+            'You are an Amazon Seller Account Analyst. You provide revenue insights, refund analysis, product suggestions, and trend detection based on uploaded reports (CSV or PDF).',
         },
-        {
-          role: 'user',
-          content: summary,
-        },
+        { role: 'user', content },
       ],
     });
 
-    const finalResponse = analysis.choices[0].message.content;
-    return NextResponse.json({ message: finalResponse });
-  } catch (error: any) {
-    console.error('Upload error:', error);
-    return NextResponse.json(
-      { error: String(error?.message || 'Unknown error') },
-      { status: 500 }
-    );
+    const aiResponse = completion.choices[0].message.content;
+    return NextResponse.json({ result: aiResponse });
+  } catch (err: any) {
+    console.error('Upload error:', err);
+    return NextResponse.json({ error: err.message || 'Something went wrong.' }, { status: 500 });
   }
 }
