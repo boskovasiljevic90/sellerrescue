@@ -4,90 +4,86 @@ import pdfParse from 'pdf-parse';
 import OpenAI from 'openai';
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY || '', // pobrini se da je u Vercel env var postavljeno
 });
 
-function truncateForModel(text: string, maxChars = 14000) {
-  if (text.length <= maxChars) return text;
-  return text.slice(0, maxChars) + '\n\n[Truncated remaining content due to size limits]';
+function chunkText(text: string, maxChars = 8000): string[] {
+  const chunks: string[] = [];
+  let start = 0;
+  while (start < text.length) {
+    let end = Math.min(start + maxChars, text.length);
+    // pokušaj da presečeš na novi red ako može (ne mora strogo)
+    if (end < text.length) {
+      const lastNewline = text.lastIndexOf('\n', end);
+      if (lastNewline > start) end = lastNewline;
+    }
+    chunks.push(text.slice(start, end));
+    start = end;
+  }
+  return chunks;
 }
 
 export async function POST(req: NextRequest) {
-  console.log('[upload] received request');
   try {
-    const contentType = req.headers.get('content-type') || '';
-    let textContent = '';
+    const formData = await req.formData();
+    const file = formData.get('file') as File;
 
-    if (contentType.includes('multipart/form-data')) {
-      const formData = await req.formData();
-      const file = formData.get('file') as File;
+    if (!file) {
+      return NextResponse.json({ error: 'No file uploaded.' }, { status: 400 });
+    }
 
-      if (!file) {
-        return NextResponse.json({ error: 'No file uploaded.' }, { status: 400 });
-      }
+    // podržava PDF i CSV (samo čita tekstualno za CSV)
+    const filename = file.name.toLowerCase();
+    let extractedText = '';
 
-      const filename = file.name.toLowerCase();
-
-      if (filename.endsWith('.pdf')) {
-        const arrayBuffer = await file.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        const parsed = await pdfParse(buffer);
-        textContent = parsed.text || '';
-      } else if (
-        filename.endsWith('.csv') ||
-        filename.endsWith('.tsv') ||
-        filename.endsWith('.txt')
-      ) {
-        const arrayBuffer = await file.arrayBuffer();
-        textContent = Buffer.from(arrayBuffer).toString('utf-8');
-      } else {
-        const arrayBuffer = await file.arrayBuffer();
-        textContent = Buffer.from(arrayBuffer).toString('utf-8');
-      }
+    if (filename.endsWith('.pdf')) {
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const parsed = await pdfParse(buffer);
+      extractedText = parsed.text || '';
+    } else if (filename.endsWith('.csv') || filename.endsWith('.txt')) {
+      extractedText = await file.text();
     } else {
-      return NextResponse.json(
-        { error: 'Unsupported content type. Use multipart/form-data with a file.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Unsupported file type. Only PDF, CSV, TXT allowed.' }, { status: 400 });
     }
 
-    if (!textContent.trim()) {
-      return NextResponse.json(
-        { error: 'Uploaded file contained no extractable text.' },
-        { status: 400 }
-      );
+    if (!extractedText.trim()) {
+      return NextResponse.json({ error: 'File had no extractable text.' }, { status: 400 });
     }
 
-    const safeText = truncateForModel(textContent, 14000);
+    // chunkuj ako je preveliko da ne prelazi rate limit / token limit
+    const chunks = chunkText(extractedText, 6000); // grubo da ostane ispod token limita
 
-    const systemPrompt = `
-You are an expert Amazon Seller Account Analyst. The user uploaded a report (PDF/CSV) containing store performance data.
-Analyze the content and return:
-1. Key issues or anomalies.
-2. Actionable improvement suggestions.
-3. Notes if data is missing or truncated.
-Keep the answer concise and business-focused.
+    let combinedAnalysis = '';
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const prompt = `
+You are an expert Amazon Seller Account analyst. Analyze the following part (${i + 1}/${chunks.length}) of the user-uploaded report. 
+Provide concise actionable insights, note anomalies, and if context is missing request clarifying follow-up questions.
+
+Content:
+${chunk}
 `;
 
-    const userPrompt = `Extracted content:\n\n${safeText}`;
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4',
+        messages: [
+          { role: 'system', content: 'You help Amazon sellers understand their reports and identify problems/opportunities.' },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.3,
+        max_tokens: 1000,
+      });
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.3,
-      max_tokens: 1000,
-    });
+      const part = completion.choices?.[0]?.message?.content || '';
+      combinedAnalysis += `--- Part ${i + 1} Analysis ---\n${part}\n\n`;
+    }
 
-    const aiResponse = completion.choices?.[0]?.message?.content || 'No response from AI.';
-    return NextResponse.json({ message: aiResponse });
+    return NextResponse.json({ result: combinedAnalysis.trim() });
   } catch (err: any) {
-    console.error('[upload] error caught:', err);
-    return NextResponse.json(
-      { error: err.message || 'Something went wrong during analysis.' },
-      { status: 500 }
-    );
+    console.error('Upload error:', err);
+    const msg = err?.message || String(err);
+    return NextResponse.json({ error: 'Something went wrong: ' + msg }, { status: 500 });
   }
 }
