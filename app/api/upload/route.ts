@@ -3,24 +3,26 @@ import pdfParse from 'pdf-parse';
 import OpenAI from 'openai';
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
+  apiKey: process.env.OPENAI_API_KEY || '',
 });
 
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
-    const file = formData.get('file') as File;
+    const file = formData.get('file');
 
-    if (!file) {
+    if (!file || typeof file === 'string') {
       return NextResponse.json({ error: 'No file uploaded.' }, { status: 400 });
     }
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
+    // Parse PDF
     const parsed = await pdfParse(buffer);
     const text = parsed.text;
 
+    // Call OpenAI
     const completion = await openai.chat.completions.create({
       model: 'gpt-4',
       messages: [
@@ -31,12 +33,12 @@ export async function POST(req: NextRequest) {
         },
         {
           role: 'user',
-          content: text,
+          content: text.slice(0, 12000), // prevent token overflow
         },
       ],
     });
 
-    const aiResponse = completion.choices[0].message.content;
+    const aiResponse = completion.choices[0]?.message?.content || 'No response from AI.';
     return NextResponse.json({ result: aiResponse });
   } catch (error: any) {
     console.error('Upload error:', error);
