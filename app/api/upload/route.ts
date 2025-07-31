@@ -55,28 +55,29 @@ Keep answer concise but specific.
 
     const userMessage = extractedText;
 
-    let completion: any;
-    const messages = [
+    // Force any to satisfy SDK typing quirk
+    const messages: any[] = [
       { role: "system", content: systemPrompt.trim() },
       { role: "user", content: userMessage },
     ];
 
-    // Try GPT-4 first, fallback to 3.5 if rate/size limit error
+    let completion: any;
+
     try {
       completion = await openai.chat.completions.create({
         model: "gpt-4",
-        messages,
+        messages: messages,
         temperature: 0.3,
         max_tokens: 1200,
-      });
+      } as any);
     } catch (err: any) {
       console.warn("GPT-4 failed, falling back to gpt-3.5-turbo:", err.message);
       completion = await openai.chat.completions.create({
         model: "gpt-3.5-turbo",
-        messages,
+        messages: messages,
         temperature: 0.3,
         max_tokens: 1200,
-      });
+      } as any);
     }
 
     const answer = completion?.choices?.[0]?.message?.content || "";
