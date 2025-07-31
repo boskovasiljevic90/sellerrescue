@@ -7,7 +7,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-function truncateForModel(text: string, maxChars = 15000) {
+function truncateForModel(text: string, maxChars = 14000) {
   if (text.length <= maxChars) return text;
   return text.slice(0, maxChars) + '\n\n[Truncated remaining content due to size limits]';
 }
@@ -34,33 +34,39 @@ export async function POST(req: NextRequest) {
         const buffer = Buffer.from(arrayBuffer);
         const parsed = await pdfParse(buffer);
         textContent = parsed.text || '';
-      } else if (filename.endsWith('.csv') || filename.endsWith('.tsv')) {
+      } else if (filename.endsWith('.csv') || filename.endsWith('.tsv') || filename.endsWith('.txt')) {
         const arrayBuffer = await file.arrayBuffer();
-        const raw = Buffer.from(arrayBuffer).toString('utf-8');
-        textContent = raw;
+        textContent = Buffer.from(arrayBuffer).toString('utf-8');
       } else {
+        // fallback: try to read as text
         const arrayBuffer = await file.arrayBuffer();
         textContent = Buffer.from(arrayBuffer).toString('utf-8');
       }
     } else {
-      console.warn('[upload] bad content type', contentType);
-      return NextResponse.json({ error: 'Unsupported content type. Use multipart/form-data with a file.' }, { status: 400 });
+      console.warn('[upload] unsupported content type', contentType);
+      return NextResponse.json(
+        { error: 'Unsupported content type. Use multipart/form-data with a file.' },
+        { status: 400 }
+      );
     }
 
     if (!textContent.trim()) {
       console.warn('[upload] empty extracted text');
-      return NextResponse.json({ error: 'Uploaded file contained no extractable text.' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Uploaded file contained no extractable text.' },
+        { status: 400 }
+      );
     }
 
     const safeText = truncateForModel(textContent, 14000);
 
     const systemPrompt = `
-You are an expert Amazon Seller Account Analyst. The user uploaded a report (PDF or CSV) containing store performance data.
+You are an expert Amazon Seller Account Analyst. The user uploaded a report (PDF/CSV) containing store performance data.
 Analyze the content and return:
 1. Key issues or anomalies.
 2. Actionable improvement suggestions.
 3. Notes if data is missing or truncated.
-Keep it concise.
+Keep the answer concise and business-focused.
 `;
 
     const userPrompt = `Extracted content:\n\n${safeText}`;
@@ -76,10 +82,13 @@ Keep it concise.
     });
 
     const aiResponse = completion.choices?.[0]?.message?.content || 'No response from AI.';
-    console.log('[upload] success, returning AI response');
+    console.log('[upload] success response length:', aiResponse.length);
     return NextResponse.json({ message: aiResponse });
   } catch (err: any) {
     console.error('[upload] error caught:', err);
-    return NextResponse.json({ error: err.message || 'Something went wrong.' }, { status: 500 });
+    return NextResponse.json(
+      { error: err.message || 'Something went wrong during analysis.' },
+      { status: 500 }
+    );
   }
 }
