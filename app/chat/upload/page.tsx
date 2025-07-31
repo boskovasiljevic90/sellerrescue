@@ -1,99 +1,86 @@
+// app/chat/upload/page.tsx
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
-  const [status, setStatus] = useState<string>("");
-  const [result, setResult] = useState<any>(null);
+  const [response, setResponse] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
-      setResult(null);
-    }
-  };
-
-  const handleUpload = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) {
-      setResult({ error: "No file selected." });
+      setError("Please select a file.");
       return;
     }
-
-    setStatus("Analyzing...");
-    setResult(null);
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    let res: Response;
+    setError(null);
+    setLoading(true);
+    setResponse(null);
     try {
-      res = await fetch("/api/upload", {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/upload", {
         method: "POST",
         body: formData,
       });
-    } catch (networkErr) {
-      setStatus("");
-      setResult({ error: "Network error: " + String(networkErr) });
-      return;
-    }
 
-    const raw = await res.text();
-    let data: any;
-    try {
-      data = raw ? JSON.parse(raw) : {};
-    } catch (parseErr) {
-      setStatus("");
-      setResult({
-        error: "Failed to parse response. Raw response: " + raw.slice(0, 1000),
-      });
-      return;
-    }
+      if (!res.ok) {
+        const text = await res.text();
+        let parsed: any;
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          throw new Error(`Server error ${res.status}: ${text}`);
+        }
+        throw new Error(parsed.error || `Server error ${res.status}`);
+      }
 
-    if (!res.ok) {
-      setStatus("");
-      setResult({ error: data.error || `Server error ${res.status}` });
-      return;
+      const data = await res.json();
+      setResponse(data);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
-
-    setStatus("");
-    setResult({ result: data.result || data.message || "No result." });
   };
 
   return (
     <div className="max-w-3xl mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6">Upload your Amazon store report</h1>
-      <form onSubmit={handleUpload} className="flex items-center gap-4 mb-6">
+      <form onSubmit={handleSubmit} className="flex gap-4 items-center mb-4">
         <label className="border rounded px-4 py-2 cursor-pointer">
           <span>{file ? file.name : "Select file"}</span>
           <input
             type="file"
-            accept="*/*"
-            onChange={handleFileChange}
+            accept=".pdf,.csv,.txt"
             className="hidden"
+            onChange={(e) => {
+              if (e.target.files && e.target.files[0]) {
+                setFile(e.target.files[0]);
+              }
+            }}
           />
         </label>
         <button
           type="submit"
-          disabled={!file}
-          className="bg-blue-600 text-white px-6 py-3 rounded font-medium"
+          disabled={loading}
+          className="px-6 py-3 bg-blue-600 text-white rounded"
         >
-          {status ? status : "Analyze"}
+          {loading ? "Analyzing..." : "Analyze"}
         </button>
       </form>
-
       <div className="bg-gray-100 p-4 rounded min-h-[150px]">
-        {result ? (
-          result.error ? (
-            <pre style={{ color: "crimson" }}>
-              {JSON.stringify(result, null, 2)}
-            </pre>
-          ) : (
-            <pre>{JSON.stringify(result, null, 2)}</pre>
-          )
-        ) : (
-          <div className="text-gray-600">Awaiting upload...</div>
+        {error && <div className="text-red-600">{"Error: " + error}</div>}
+        {response && (
+          <pre className="whitespace-pre-wrap text-sm">
+            {JSON.stringify(response, null, 2)}
+          </pre>
+        )}
+        {!error && !response && !loading && (
+          <div className="text-gray-500">Upload a PDF/CSV or text report to get insights.</div>
         )}
       </div>
     </div>
