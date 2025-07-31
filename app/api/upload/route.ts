@@ -3,7 +3,7 @@ import pdfParse from 'pdf-parse';
 import OpenAI from 'openai';
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY!,
 });
 
 export async function POST(req: NextRequest) {
@@ -26,7 +26,8 @@ export async function POST(req: NextRequest) {
       messages: [
         {
           role: 'system',
-          content: 'You are an expert Amazon Seller Account AI Analyst. Analyze the following extracted content from a user-uploaded PDF file and provide helpful insights and suggestions for improvements.',
+          content:
+            'You are an expert Amazon Seller Account AI Analyst. Analyze the following extracted content from a user-uploaded PDF file and provide helpful insights and suggestions for improvements.',
         },
         {
           role: 'user',
@@ -37,9 +38,8 @@ export async function POST(req: NextRequest) {
 
     const aiResponse = completion.choices[0].message.content;
     return NextResponse.json({ result: aiResponse });
-
   } catch (error: any) {
     console.error('Upload error:', error);
-    return NextResponse.json({ error: String(error.message || error) }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Unknown error' }, { status: 500 });
   }
 }
