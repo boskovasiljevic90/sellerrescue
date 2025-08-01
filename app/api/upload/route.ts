@@ -1,86 +1,72 @@
 // app/api/upload/route.ts
-import { NextResponse } from "next/server";
-import pdfParse from "pdf-parse";
-import OpenAI from "openai";
-import { parse as csvParse } from "csv-parse/sync";
+import { NextResponse } from 'next/server';
+import pdfParse from 'pdf-parse';
+import OpenAI from 'openai';
+
+export const runtime = 'edge';
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || "",
+  apiKey: process.env.OPENAI_API_KEY || '',
 });
 
-// Simple chunking to avoid too-large requests
-function chunkText(text: string, maxChars = 7000): string[] {
-  const chunks: string[] = [];
-  let i = 0;
-  while (i < text.length) {
-    chunks.push(text.slice(i, i + maxChars));
-    i += maxChars;
-  }
-  return chunks;
+// helper da skratimo tekst ako je predugačak (jednostavno trimovanje u ovom primeru)
+function truncateText(text: string, maxChars = 15000) {
+  if (text.length <= maxChars) return text;
+  return text.slice(0, maxChars) + '\n\n[Truncated: original content was larger]';
 }
 
 export async function POST(req: Request) {
   try {
-    // Expect a multipart/form-data with field "file"
-    const formData = await (req as any).formData();
-    const file = formData.get("file") as File | null;
+    // podržava multipart/form-data upload iz browsera
+    const formData = await req.formData();
+    const file = formData.get('file') as File | null;
 
     if (!file) {
-      return NextResponse.json({ error: "No file uploaded." }, { status: 400 });
+      return NextResponse.json({ error: 'No file uploaded.' }, { status: 400 });
     }
 
+    // uzmi bajtove i parsiraj PDF
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    let extractedText = "";
+    const parsed = await pdfParse(buffer);
+    let text = parsed.text || '';
 
-    const name = (file as any).name || "";
-    const type = (file as any).type || "";
+    // trimuj ako je previše dugačko zbog rate limit-a / tokena
+    text = truncateText(text, 15000); // prilagodi po potrebi
 
-    if (type === "application/pdf" || name.toLowerCase().endsWith(".pdf")) {
-      const parsed = await pdfParse(buffer);
-      extractedText = parsed.text;
-    } else if (
-      type === "text/csv" ||
-      name.toLowerCase().endsWith(".csv")
-    ) {
-      const str = buffer.toString("utf-8");
-      const records = csvParse(str, { columns: true, skip_empty_lines: true });
-      extractedText = JSON.stringify(records, null, 2);
-    } else {
-      extractedText = buffer.toString("utf-8");
+    // pripremi poruke za OpenAI
+    const messages = [
+      {
+        role: 'system',
+        content:
+          'You are an expert Amazon Seller Account Analyst. Analyze the following extracted content from an uploaded PDF and return concise actionable insights, issues, and recommendations. Output in English.',
+      },
+      {
+        role: 'user',
+        content: text,
+      },
+    ];
+
+    // request ka OpenAI (fallback ako je previše tokena možeš kasnije razdvajati)
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages,
+      temperature: 0.3,
+      max_tokens: 1200,
+    });
+
+    const aiResponse = completion.choices?.[0]?.message?.content || '';
+
+    return NextResponse.json({ result: aiResponse });
+  } catch (error: any) {
+    console.error('Upload error:', error);
+    // specifičan rate / size feedback
+    if (error?.error?.message) {
+      return NextResponse.json(
+        { error: error.error.message || String(error) },
+        { status: 500 }
+      );
     }
-
-    if (!extractedText || extractedText.trim().length === 0) {
-      return NextResponse.json({ error: "File parsed to empty content." }, { status: 400 });
-    }
-
-    const chunks = chunkText(extractedText, 6000);
-    let aggregated = "";
-
-    for (const chunk of chunks) {
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4",
-        messages: [
-          {
-            role: "system",
-            content: "You are an expert Amazon Seller Account analyst. Provide concise actionable insights based on the content.",
-          },
-          {
-            role: "user",
-            content: chunk,
-          },
-        ],
-        temperature: 0.3,
-        max_tokens: 1000,
-      });
-
-      const part = completion.choices?.[0]?.message?.content || "";
-      aggregated += part + "\n\n---\n\n";
-    }
-
-    return NextResponse.json({ result: aggregated.trim() });
-  } catch (err: any) {
-    console.error("Upload error:", err);
-    return NextResponse.json({ error: err.message || "Server error." }, { status: 500 });
+    return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
