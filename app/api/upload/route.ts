@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
       {
         role: 'system',
         content:
-          'You are an expert Amazon Seller Account Analyst. Analyze the following extracted content from an uploaded PDF and return concise, actionable insights, issues, and recommendations. Output in English.',
+          'You are an expert Amazon Seller Account Analyst. Analyze the following extracted content from an uploaded PDF and return concise, actionable insights, issues, and recommendations in English.',
       },
       {
         role: 'user',
