@@ -1,45 +1,44 @@
-"use client";
+// app/chat/upload/page.tsx
+'use client';
 
-import { useState } from "react";
+import { useState } from 'react';
 
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
-  const [result, setResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) {
-      setError("Please select a file first.");
-      return;
-    }
-
+    if (!file) return;
     setLoading(true);
-    setResult(null);
     setError(null);
-
-    const formData = new FormData();
-    formData.append("file", file);
-
+    setResult(null);
     try {
-      const res = await fetch("/api/upload", {
-        method: "POST",
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
         body: formData,
       });
 
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Server error ${res.status}: ${text}`);
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.error || `Status ${res.status}`);
       }
 
       const data = await res.json();
-      if (data.error) {
-        throw new Error(data.error);
+      if (data.result) {
+        setResult(data.result);
+      } else if (data.error) {
+        setError(data.error);
+      } else {
+        setError('Unexpected response');
       }
-      setResult(data.result);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (e: any) {
+      setError(e.message || 'Upload failed');
     } finally {
       setLoading(false);
     }
@@ -47,41 +46,43 @@ export default function UploadPage() {
 
   return (
     <div className="max-w-2xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-4">Upload Report for Analysis</h1>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <div className="flex gap-4">
-          <label className="border rounded px-3 py-2 cursor-pointer flex-1">
-            <span>{file ? file.name : "Choose file (PDF or CSV)"}</span>
-            <input
-              type="file"
-              accept=".pdf,.csv"
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files) setFile(e.target.files[0]);
-              }}
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={!file || loading}
-            className="bg-blue-600 text-white px-6 py-2 rounded"
-          >
-            {loading ? "Analyzing..." : "Analyze"}
-          </button>
-        </div>
+      <h1 className="text-2xl font-bold mb-4">Upload PDF for Analysis</h1>
+      <form onSubmit={handleSubmit}>
+        <input
+          type="file"
+          accept="application/pdf"
+          onChange={(e) => {
+            setFile(e.target.files?.[0] || null);
+          }}
+        />
+        <button
+          type="submit"
+          disabled={!file || loading}
+          style={{ marginLeft: '8px' }}
+        >
+          {loading ? 'Analyzing...' : 'Upload & Analyze'}
+        </button>
       </form>
-      <div className="mt-6 bg-gray-100 p-4 rounded">
-        {error && <div className="text-red-600 mb-2">{error}</div>}
-        {result && (
-          <div>
-            <h2 className="font-semibold mb-2">Analysis Result:</h2>
-            <pre className="whitespace-pre-wrap">{result}</pre>
-          </div>
-        )}
-        {!result && !error && !loading && (
-          <div className="text-gray-500">Upload a PDF or CSV to get insights.</div>
-        )}
-      </div>
+      {error && (
+        <div style={{ marginTop: '16px', color: 'red' }}>
+          <strong>Error:</strong> {error}
+        </div>
+      )}
+      {result && (
+        <div
+          style={{
+            marginTop: '16px',
+            padding: '12px',
+            border: '1px solid #ccc',
+            borderRadius: '6px',
+            background: '#f9f9f9',
+            whiteSpace: 'pre-wrap',
+          }}
+        >
+          <h2 className="font-semibold">AI Analysis:</h2>
+          <div>{result}</div>
+        </div>
+      )}
     </div>
   );
 }

@@ -7,7 +7,6 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || '',
 });
 
-// Helper: smanji predugačak tekst da ne probije token limit
 function truncateText(text: string, maxChars = 12000) {
   if (text.length <= maxChars) return text;
   return text.slice(0, maxChars) + '\n\n[Truncated due to length]';
@@ -43,7 +42,7 @@ export async function POST(req: NextRequest) {
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4',
-      messages: messages as any, // typing workaround
+      messages: messages as any,
       temperature: 0.3,
       max_tokens: 1000,
     });
