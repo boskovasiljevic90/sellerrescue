@@ -7,8 +7,8 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || '',
 });
 
-// helper: skratiti predugačak tekst da ne bi pucao token limit
-function truncateText(text: string, maxChars = 15000) {
+// truncate long extracted text to avoid token limits
+function truncateText(text: string, maxChars = 12000) {
   if (text.length <= maxChars) return text;
   return text.slice(0, maxChars) + '\n\n[Truncated due to length]';
 }
@@ -27,9 +27,8 @@ export async function POST(req: NextRequest) {
 
     const parsed = await pdfParse(buffer);
     let text = parsed.text || '';
-    text = truncateText(text, 15000); // prilagodi ako treba
+    text = truncateText(text);
 
-    // pripremi poruke
     const messages = [
       {
         role: 'system',
@@ -42,12 +41,11 @@ export async function POST(req: NextRequest) {
       },
     ];
 
-    // zbog tipova SDK-a, castujemo u any da kompajler ne kuka (poruke su validne)
     const completion = await openai.chat.completions.create({
       model: 'gpt-4',
-      messages: messages as any,
+      messages: messages as any, // cast to satisfy SDK typings
       temperature: 0.3,
-      max_tokens: 1200,
+      max_tokens: 1000,
     });
 
     const aiResponse = completion.choices?.[0]?.message?.content || '';
