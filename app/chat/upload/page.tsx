@@ -4,83 +4,70 @@
 import { useState } from 'react';
 
 export default function UploadPage() {
-  const [file, setFile] = useState<File | null>(null);
-  const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) return;
-    setLoading(true);
-    setError(null);
     setResult(null);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
+    setError(null);
 
+    const form = e.currentTarget as HTMLFormElement;
+    const fileInput = form.querySelector('input[name="file"]') as HTMLInputElement;
+    if (!fileInput.files || fileInput.files.length === 0) {
+      setError('Please select a file.');
+      return;
+    }
+
+    const file = fileInput.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setLoading(true);
+    try {
       const res = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
       });
-
       if (!res.ok) {
-        const err = await res.json().catch(() => null);
-        throw new Error(err?.error || `Status ${res.status}`);
+        const err = await res.text();
+        throw new Error(`Status ${res.status}: ${err}`);
       }
-
       const data = await res.json();
-      if (data.result) {
-        setResult(data.result);
-      } else if (data.error) {
+      if (data.error) {
         setError(data.error);
       } else {
-        setError('Unexpected response');
+        setResult(data.result);
       }
-    } catch (e: any) {
-      setError(e.message || 'Upload failed');
+    } catch (err: any) {
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
+    <div className="max-w-xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-4">Upload PDF for Analysis</h1>
       <form onSubmit={handleSubmit}>
-        <input
-          type="file"
-          accept="application/pdf"
-          onChange={(e) => {
-            setFile(e.target.files?.[0] || null);
-          }}
-        />
-        <button
-          type="submit"
-          disabled={!file || loading}
-          style={{ marginLeft: '8px' }}
-        >
-          {loading ? 'Analyzing...' : 'Upload & Analyze'}
-        </button>
+        <input type="file" name="file" accept="application/pdf" required />
+        <div className="mt-4">
+          <button type="submit" disabled={loading}>
+            {loading ? 'Analyzing...' : 'Upload & Analyze'}
+          </button>
+        </div>
       </form>
+
       {error && (
-        <div style={{ marginTop: '16px', color: 'red' }}>
+        <div style={{ marginTop: 20, color: 'red' }}>
           <strong>Error:</strong> {error}
         </div>
       )}
       {result && (
-        <div
-          style={{
-            marginTop: '16px',
-            padding: '12px',
-            border: '1px solid #ccc',
-            borderRadius: '6px',
-            background: '#f9f9f9',
-            whiteSpace: 'pre-wrap',
-          }}
-        >
+        <div style={{ marginTop: 20 }}>
           <h2 className="font-semibold">AI Analysis:</h2>
-          <div>{result}</div>
+          <pre style={{ whiteSpace: 'pre-wrap' }}>{result}</pre>
         </div>
       )}
     </div>
