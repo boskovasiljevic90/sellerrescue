@@ -1,23 +1,20 @@
 // app/api/upload/route.ts
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import pdfParse from 'pdf-parse';
 import OpenAI from 'openai';
-
-export const runtime = 'edge';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || '',
 });
 
-// helper da skratimo tekst ako je predugačak (jednostavno trimovanje u ovom primeru)
+// helper: skratiti predugačak tekst da ne bi pucao token limit
 function truncateText(text: string, maxChars = 15000) {
   if (text.length <= maxChars) return text;
-  return text.slice(0, maxChars) + '\n\n[Truncated: original content was larger]';
+  return text.slice(0, maxChars) + '\n\n[Truncated due to length]';
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    // podržava multipart/form-data upload iz browsera
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
 
@@ -25,16 +22,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No file uploaded.' }, { status: 400 });
     }
 
-    // uzmi bajtove i parsiraj PDF
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+
+    // parse PDF (radi samo u Node.js runtime, zato ne sme da bude edge)
     const parsed = await pdfParse(buffer);
     let text = parsed.text || '';
+    text = truncateText(text, 15000); // prilagodi ako treba
 
-    // trimuj ako je previše dugačko zbog rate limit-a / tokena
-    text = truncateText(text, 15000); // prilagodi po potrebi
-
-    // pripremi poruke za OpenAI
     const messages = [
       {
         role: 'system',
@@ -47,7 +42,6 @@ export async function POST(req: Request) {
       },
     ];
 
-    // request ka OpenAI (fallback ako je previše tokena možeš kasnije razdvajati)
     const completion = await openai.chat.completions.create({
       model: 'gpt-4',
       messages,
@@ -60,13 +54,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ result: aiResponse });
   } catch (error: any) {
     console.error('Upload error:', error);
-    // specifičan rate / size feedback
-    if (error?.error?.message) {
-      return NextResponse.json(
-        { error: error.error.message || String(error) },
-        { status: 500 }
-      );
-    }
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    const msg =
+      error?.error?.message ||
+      error?.message ||
+      (typeof error === 'string' ? error : 'Unknown error');
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
