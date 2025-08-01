@@ -7,7 +7,6 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || '',
 });
 
-// Helper to truncate to avoid hitting token limits
 function truncateText(text: string, maxChars = 12000) {
   if (text.length <= maxChars) return text;
   return text.slice(0, maxChars) + '\n\n[Truncated due to length]';
@@ -33,7 +32,7 @@ export async function POST(req: NextRequest) {
       {
         role: 'system',
         content:
-          'You are an expert Amazon Seller Account Analyst. Analyze the following extracted content from an uploaded PDF and return concise actionable insights, issues, and recommendations. Output in English.',
+          'You are an expert Amazon Seller Account Analyst. Analyze the following extracted content from an uploaded PDF and return concise, actionable insights, issues, and recommendations. Output in English.',
       },
       {
         role: 'user',
@@ -43,7 +42,7 @@ export async function POST(req: NextRequest) {
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4',
-      messages: messages as any, // SDK typing workaround
+      messages: messages as any, // workaround for SDK typing
       temperature: 0.3,
       max_tokens: 1000,
     });
