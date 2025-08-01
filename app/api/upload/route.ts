@@ -25,11 +25,11 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // parse PDF (radi samo u Node.js runtime, zato ne sme da bude edge)
     const parsed = await pdfParse(buffer);
     let text = parsed.text || '';
     text = truncateText(text, 15000); // prilagodi ako treba
 
+    // pripremi poruke
     const messages = [
       {
         role: 'system',
@@ -42,9 +42,10 @@ export async function POST(req: NextRequest) {
       },
     ];
 
+    // zbog tipova SDK-a, castujemo u any da kompajler ne kuka (poruke su validne)
     const completion = await openai.chat.completions.create({
       model: 'gpt-4',
-      messages,
+      messages: messages as any,
       temperature: 0.3,
       max_tokens: 1200,
     });
