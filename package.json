@@ -20,6 +20,7 @@
     "typescript": "^5.3.3",
     "@types/react": "^18.2.14",
     "@types/node": "^20.11.30",
-    "pdf-parse": "^1.1.1"
+    "pdf-parse": "^1.1.1",
+    "formidable": "^2.2.4"
   }
 }
