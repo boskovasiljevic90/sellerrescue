@@ -1,43 +1,40 @@
+// app/chat/upload/page.tsx
 'use client';
 
 import { useState } from 'react';
 
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
-  const [result, setResult] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<string>('');
 
-  async function handleSubmit(e: React.FormEvent) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) return alert('Please select a file.');
-
+    if (!file) return;
     setLoading(true);
+    setResult('');
+
     const formData = new FormData();
     formData.append('file', file);
 
-    try {
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      const json = await res.json();
-      if (res.ok) {
-        setResult(json.result);
-      } else {
-        alert(json.error || 'Upload failed');
-      }
-    } catch (err) {
-      console.error(err);
-      alert('Network error');
-    } finally {
-      setLoading(false);
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
+
+    const json = await res.json();
+    if (res.ok) {
+      setResult(json.result);
+    } else {
+      setResult(json.error || 'Unexpected error');
     }
-  }
+    setLoading(false);
+  };
 
   return (
-    <div className="max-w-lg mx-auto p-6">
+    <div className="max-w-xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-4">Upload PDF for Analysis</h1>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} className="space-y-4">
         <input
           type="file"
           accept="application/pdf"
@@ -46,16 +43,15 @@ export default function UploadPage() {
         <button
           type="submit"
           disabled={!file || loading}
-          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded"
+          className="px-4 py-2 bg-blue-600 text-white rounded"
         >
-          {loading ? 'Analyzing...' : 'Upload & Analyze'}
+          {loading ? 'Analyzing…' : 'Upload & Analyze'}
         </button>
       </form>
       {result && (
-        <div className="mt-6 p-4 bg-gray-100 rounded">
-          <h2 className="font-semibold">AI Response:</h2>
-          <pre className="whitespace-pre-wrap">{result}</pre>
-        </div>
+        <pre className="mt-6 whitespace-pre-wrap bg-gray-100 p-4 rounded">
+          {result}
+        </pre>
       )}
     </div>
   );
