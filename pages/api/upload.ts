@@ -4,6 +4,7 @@ import formidable from 'formidable';
 import fs from 'fs';
 import pdfParse from 'pdf-parse';
 import OpenAI from 'openai';
+import { checkFreemium } from '../../lib/subscription';
 
 export const config = {
   api: {
@@ -34,6 +35,8 @@ export default async function handler(
     return res.status(405).end(`Method ${req.method} Not Allowed`);
   }
 
+  if (!checkFreemium(req, res)) return;
+
   try {
     const files = await parseForm(req);
     const file = Array.isArray(files.file) ? files.file[0] : files.file;
@@ -50,11 +53,13 @@ export default async function handler(
     // pošalji OpenAI-ju
     const completion = await openai.chat.completions.create({
       model: 'gpt-4',
+      model: 'gpt-4o',
       messages: [
         {
           role: 'system',
           content:
             'You are an expert Amazon Seller Account AI Analyst. Analyze the following extracted content from a user-uploaded PDF file and provide helpful insights and suggestions for improvements.',
+            'You are SellerRescue, an expert Amazon seller problem solver. Analyze the following extracted content from a user-uploaded PDF file and provide helpful insights and suggestions for improvements.',
         },
         { role: 'user', content: text },
       ],
